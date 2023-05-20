@@ -8,7 +8,7 @@ fn main() {
     let stdin = io::stdin();
 
     for line in stdin.lines() {
-        let line = Line::parse(line.unwrap());
+        let line = Line::parse(&line.unwrap());
         println!("{line:?}");
     }
 }
