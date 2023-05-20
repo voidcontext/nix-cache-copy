@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 clap = "4.3.0"
 regex = "1.8.1"
+tokio = {version = "1.28.1", features = ["macros", "rt", "rt-multi-thread", "sync", "time"]}
