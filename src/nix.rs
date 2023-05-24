@@ -64,8 +64,6 @@ impl Cli for CliProcess {
                 .await?;
 
             let output_str = std::str::from_utf8(&output.stdout)?;
-
-            println!("Show derivation output: {output_str:?}");
             let derivation: Derivation = serde_json::from_str(output_str)?;
 
             println!("Derivaton output to copy: {derivation:?}");
