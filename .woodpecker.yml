@@ -1,0 +1,9 @@
+pipeline:
+  check:
+    image: nixos/nix
+    commands:
+      - nix flake check --extra-experimental-features nix-command --extra-experimental-features flakes
+      - nix build
+      - nix copy -s --to file:///var/lib/woodpecker-agent/nix-store $(realpath result)
+    volumes:
+      - /var/lib/woodpecker-agent/nix-store:/var/lib/woodpecker-agent/nix-store
