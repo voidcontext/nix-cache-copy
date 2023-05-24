@@ -29,6 +29,9 @@ impl AsRef<OsStr> for DrvFile {
 struct Cli {
     #[clap(long)]
     to: String,
+
+    #[clap(long, default_value_t = false)]
+    dry_run: bool,
 }
 
 #[tokio::main]
@@ -39,7 +42,7 @@ async fn main() {
 
     bootstrap::run(
         stdin.lock().lines(),
-        nix::CliProcess::new(true),
+        nix::CliProcess::new(cli.dry_run),
         cli.to.clone(),
     )
     .await;
