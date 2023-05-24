@@ -1,22 +1,29 @@
-use std::time::Duration;
+use std::future;
 
 use tokio::sync::mpsc::{self, Sender};
 
-use crate::{parser::Line, worker};
+use crate::{nix::Cli, parser::Line, worker};
 
-pub async fn run<R, E: std::fmt::Debug>(input: R)
+pub async fn run<R, E: std::fmt::Debug, NC>(input: R, nix_cli: NC)
 where
     R: Iterator<Item = Result<String, E>>,
+    NC: Cli + Clone + Send + Sync + 'static,
 {
     let (tx, rx) = mpsc::channel::<Line>(1000);
     let (signal_tx, signal_rx) = mpsc::channel::<()>(10);
 
-    let worker = worker::spawn(rx, signal_rx, |data| {
-        Box::pin(async move {
-            println!("processing line: {data:?}");
-            tokio::time::sleep(Duration::from_millis(50)).await;
-            println!("processing line done: {data:?}");
-        })
+    let worker = worker::spawn(rx, signal_rx, move |data| {
+        let nix_cli = nix_cli.clone();
+
+        match data {
+            Line::Info(_) => Box::pin(future::ready(())),
+            Line::Copied(_, path) => Box::pin(async move {
+                nix_cli.copy_store_path(&path).await.unwrap();
+            }),
+            Line::Built(_, drv_file) => Box::pin(async move {
+                nix_cli.copy_drv_output(&drv_file).await.unwrap();
+            }),
+        }
     });
 
     process_stdin(input, tx).await.unwrap();
@@ -60,12 +67,51 @@ where
 
 #[cfg(test)]
 mod test {
-    use tokio::sync::mpsc;
+    use std::sync::Arc;
 
-    use crate::{bootstrap::process_stdin, parser::Line};
+    use async_trait::async_trait;
+    use tokio::sync::{mpsc, Mutex};
+
+    use super::{process_stdin, run};
+    use crate::{nix::Cli, parser::Line, DrvFile, StorePath};
 
     #[derive(Debug)]
     struct Error;
+
+    #[derive(Debug, PartialEq)]
+    enum NixCliCall {
+        CopyStorePath(StorePath),
+        CopyDrvOurput(DrvFile),
+    }
+
+    #[derive(Clone)]
+    struct MockNixCli {
+        calls: Arc<Mutex<Vec<NixCliCall>>>,
+    }
+
+    impl MockNixCli {
+        fn new() -> Self {
+            Self {
+                calls: Arc::new(Mutex::new(Vec::new())),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl Cli for MockNixCli {
+        async fn copy_store_path(&self, path: &StorePath) -> anyhow::Result<()> {
+            let mut calls = self.calls.lock().await;
+            calls.push(NixCliCall::CopyStorePath((*path).clone()));
+
+            Ok(())
+        }
+        async fn copy_drv_output(&self, drv: &DrvFile) -> anyhow::Result<()> {
+            let mut calls = self.calls.lock().await;
+            calls.push(NixCliCall::CopyDrvOurput((*drv).clone()));
+
+            Ok(())
+        }
+    }
 
     #[tokio::test]
     async fn test_process_stdin_delays_sending_1() {
@@ -90,5 +136,48 @@ mod test {
 
         assert_eq!(rx.recv().await, Some(Line::Info(String::from("one"))));
         assert!(rx.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn test_process_stdin_processes_all_lines() {
+        let (tx, mut rx) = mpsc::channel(100);
+
+        let input: Vec<Result<String, Error>> =
+            vec![Ok(String::from("one")), Ok(String::from("two"))];
+
+        let result = process_stdin(input.into_iter(), tx).await;
+        assert!(result.is_ok());
+
+        assert_eq!(rx.recv().await, Some(Line::Info(String::from("one"))));
+        assert_eq!(rx.recv().await, Some(Line::Info(String::from("two"))));
+        assert_eq!(rx.recv().await, None);
+    }
+
+    #[tokio::test]
+    async fn test_run_parses_stdin_and_copies_store_paths() {
+        let input: Vec<Result<String, Error>> =
+            vec![
+                Ok(String::from("/nix/store/y0id07hk69wfhr14mpjq22fv2v27nsnk-zstd-1.5.2-dev")), 
+                Ok(String::from("copying path '/nix/store/vnwdak3n1w2jjil119j65k8mw1z23p84-glibc-2.35-224' from 'https://cache.nixos.org'...")),
+                Ok(String::from("building '/nix/store/kwd8mkkl1sv3n5z9jf8447gr9g299pmp-nix-cache-copy-0.1.0.drv'..."))
+            ];
+
+        let nix_cli = MockNixCli::new();
+        let calls = Arc::clone(&nix_cli.calls);
+        run(input.into_iter(), nix_cli).await;
+
+        let calls = calls.lock().await;
+
+        assert_eq!(
+            *calls,
+            vec![
+                NixCliCall::CopyStorePath(StorePath::from(String::from(
+                    "/nix/store/vnwdak3n1w2jjil119j65k8mw1z23p84-glibc-2.35-224"
+                ))),
+                NixCliCall::CopyDrvOurput(DrvFile::from(String::from(
+                    "/nix/store/kwd8mkkl1sv3n5z9jf8447gr9g299pmp-nix-cache-copy-0.1.0.drv"
+                ))),
+            ]
+        );
     }
 }

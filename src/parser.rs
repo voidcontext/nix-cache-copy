@@ -1,10 +1,12 @@
 use regex::Regex;
 
+use crate::{DrvFile, StorePath};
+
 #[derive(Debug, PartialEq)]
 pub enum Line {
     Info(String),
-    Copied(String, String),
-    Built(String, String),
+    Copied(String, StorePath),
+    Built(String, DrvFile),
 }
 
 impl Line {
@@ -13,13 +15,19 @@ impl Line {
         let caps = copy_regex.captures(s);
 
         if let Some(caps) = caps {
-            Line::Copied(s.to_string(), String::from(caps.get(1).unwrap().as_str()))
+            Line::Copied(
+                s.to_string(),
+                StorePath::from(String::from(caps.get(1).unwrap().as_str())),
+            )
         } else {
             let build_regex = Regex::new(r"^building '(.*?)'...$").unwrap();
             let caps = build_regex.captures(s);
 
             if let Some(caps) = caps {
-                Line::Built(s.to_string(), String::from(caps.get(1).unwrap().as_str()))
+                Line::Built(
+                    s.to_string(),
+                    DrvFile::from(String::from(caps.get(1).unwrap().as_str())),
+                )
             } else {
                 Line::Info(s.to_string())
             }
@@ -29,7 +37,7 @@ impl Line {
 
 #[cfg(test)]
 mod test {
-    use crate::parser::Line;
+    use crate::{parser::Line, DrvFile, StorePath};
 
     #[test]
     fn parse_should_parse_artbitrary_line_as_info() {
@@ -44,7 +52,9 @@ mod test {
             Line::parse(&string),
             Line::Copied(
                 string,
-                String::from("/nix/store/vnwdak3n1w2jjil119j65k8mw1z23p84-glibc-2.35-224")
+                StorePath::from(String::from(
+                    "/nix/store/vnwdak3n1w2jjil119j65k8mw1z23p84-glibc-2.35-224"
+                ))
             )
         );
     }
@@ -58,9 +68,9 @@ mod test {
             Line::parse(&string),
             Line::Built(
                 string,
-                String::from(
+                DrvFile::from(String::from(
                     "/nix/store/kwd8mkkl1sv3n5z9jf8447gr9g299pmp-nix-cache-copy-0.1.0.drv"
-                )
+                ))
             )
         );
     }
