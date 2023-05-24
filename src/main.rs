@@ -3,6 +3,7 @@ use std::{
     io::{self, BufRead},
 };
 
+use clap::Parser;
 use nova::newtype;
 
 mod bootstrap;
@@ -22,9 +23,24 @@ impl AsRef<OsStr> for DrvFile {
     }
 }
 
+#[derive(Parser)]
+#[clap(author, version, about, long_about = None)]
+#[clap(propagate_version = true)]
+struct Cli {
+    #[clap(long)]
+    to: String,
+}
+
 #[tokio::main]
 async fn main() {
     let stdin = io::stdin();
 
-    bootstrap::run(stdin.lock().lines(), nix::CliProcess::new(true)).await;
+    let cli = Cli::parse();
+
+    bootstrap::run(
+        stdin.lock().lines(),
+        nix::CliProcess::new(true),
+        cli.to.clone(),
+    )
+    .await;
 }

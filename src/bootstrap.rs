@@ -4,7 +4,7 @@ use tokio::sync::mpsc::{self, Sender};
 
 use crate::{nix::Cli, parser::Line, worker};
 
-pub async fn run<R, E: std::fmt::Debug, NC>(input: R, nix_cli: NC)
+pub async fn run<R, E: std::fmt::Debug, NC>(input: R, nix_cli: NC, target_dir: String)
 where
     R: Iterator<Item = Result<String, E>>,
     NC: Cli + Clone + Send + Sync + 'static,
@@ -14,14 +14,18 @@ where
 
     let worker = worker::spawn(rx, signal_rx, move |data| {
         let nix_cli = nix_cli.clone();
+        let target_dir = target_dir.clone();
 
         match data {
             Line::Info(_) => Box::pin(future::ready(())),
             Line::Copied(_, path) => Box::pin(async move {
-                nix_cli.copy_store_path(&path).await.unwrap();
+                nix_cli.copy_store_path(&path, &target_dir).await.unwrap();
             }),
             Line::Built(_, drv_file) => Box::pin(async move {
-                nix_cli.copy_drv_output(&drv_file).await.unwrap();
+                nix_cli
+                    .copy_drv_output(&drv_file, &target_dir)
+                    .await
+                    .unwrap();
             }),
         }
     });
@@ -80,8 +84,8 @@ mod test {
 
     #[derive(Debug, PartialEq)]
     enum NixCliCall {
-        CopyStorePath(StorePath),
-        CopyDrvOurput(DrvFile),
+        CopyStorePath(StorePath, String),
+        CopyDrvOurput(DrvFile, String),
     }
 
     #[derive(Clone)]
@@ -99,15 +103,15 @@ mod test {
 
     #[async_trait]
     impl Cli for MockNixCli {
-        async fn copy_store_path(&self, path: &StorePath) -> anyhow::Result<()> {
+        async fn copy_store_path(&self, path: &StorePath, to: &str) -> anyhow::Result<()> {
             let mut calls = self.calls.lock().await;
-            calls.push(NixCliCall::CopyStorePath((*path).clone()));
+            calls.push(NixCliCall::CopyStorePath((*path).clone(), String::from(to)));
 
             Ok(())
         }
-        async fn copy_drv_output(&self, drv: &DrvFile) -> anyhow::Result<()> {
+        async fn copy_drv_output(&self, drv: &DrvFile, to: &str) -> anyhow::Result<()> {
             let mut calls = self.calls.lock().await;
-            calls.push(NixCliCall::CopyDrvOurput((*drv).clone()));
+            calls.push(NixCliCall::CopyDrvOurput((*drv).clone(), String::from(to)));
 
             Ok(())
         }
@@ -164,19 +168,25 @@ mod test {
 
         let nix_cli = MockNixCli::new();
         let calls = Arc::clone(&nix_cli.calls);
-        run(input.into_iter(), nix_cli).await;
+        run(input.into_iter(), nix_cli, String::from("/some/path")).await;
 
         let calls = calls.lock().await;
 
         assert_eq!(
             *calls,
             vec![
-                NixCliCall::CopyStorePath(StorePath::from(String::from(
-                    "/nix/store/vnwdak3n1w2jjil119j65k8mw1z23p84-glibc-2.35-224"
-                ))),
-                NixCliCall::CopyDrvOurput(DrvFile::from(String::from(
-                    "/nix/store/kwd8mkkl1sv3n5z9jf8447gr9g299pmp-nix-cache-copy-0.1.0.drv"
-                ))),
+                NixCliCall::CopyStorePath(
+                    StorePath::from(String::from(
+                        "/nix/store/vnwdak3n1w2jjil119j65k8mw1z23p84-glibc-2.35-224"
+                    )),
+                    String::from("/some/path")
+                ),
+                NixCliCall::CopyDrvOurput(
+                    DrvFile::from(String::from(
+                        "/nix/store/kwd8mkkl1sv3n5z9jf8447gr9g299pmp-nix-cache-copy-0.1.0.drv"
+                    )),
+                    String::from("/some/path")
+                ),
             ]
         );
     }

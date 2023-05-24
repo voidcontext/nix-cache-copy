@@ -8,8 +8,8 @@ use crate::{DrvFile, StorePath};
 
 #[async_trait]
 pub trait Cli {
-    async fn copy_store_path(&self, path: &StorePath) -> anyhow::Result<()>;
-    async fn copy_drv_output(&self, drv: &DrvFile) -> anyhow::Result<()>;
+    async fn copy_store_path(&self, path: &StorePath, to: &str) -> anyhow::Result<()>;
+    async fn copy_drv_output(&self, drv: &DrvFile, to: &str) -> anyhow::Result<()>;
 }
 
 #[derive(Clone)]
@@ -37,12 +37,12 @@ struct DerivationOutput {
 
 #[async_trait]
 impl Cli for CliProcess {
-    async fn copy_store_path(&self, path: &StorePath) -> anyhow::Result<()> {
+    async fn copy_store_path(&self, path: &StorePath, to: &str) -> anyhow::Result<()> {
         println!("copying path: {path:?}");
 
         if !self.dry_run {
             let mut child = Command::new("nix")
-                .args(["copy", "--to", "file:///tmp/store", path])
+                .args(["copy", "--to", format!("file://{to}").as_str(), path])
                 .spawn()
                 .unwrap();
 
@@ -52,7 +52,7 @@ impl Cli for CliProcess {
         Ok(())
     }
 
-    async fn copy_drv_output(&self, drv: &DrvFile) -> anyhow::Result<()> {
+    async fn copy_drv_output(&self, drv: &DrvFile, to: &str) -> anyhow::Result<()> {
         println!("copying derivation output: {drv:?}");
 
         if self.dry_run {
@@ -78,7 +78,7 @@ impl Cli for CliProcess {
                 .unwrap()
                 .path;
 
-            self.copy_store_path(store_path).await
+            self.copy_store_path(store_path, to).await
         }
     }
 }
