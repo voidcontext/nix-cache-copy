@@ -5,6 +5,6 @@ pipeline:
       - echo "experimental-features = nix-command flakes" >> /etc/nix/nix.conf
       - nix flake check
       - nix build
-      - nix copy --to file:///var/lib/woodpecker-agent/nix-store $(realpath result)
+      - nix copy --to file:///var/lib/woodpecker-agent/nix-store?compression=none&secre-key=/var/lib/woodpecker-agent/nix-store/cache-priv-key.pem $(realpath result)
     volumes:
       - /var/lib/woodpecker-agent/nix-store:/var/lib/woodpecker-agent/nix-store
