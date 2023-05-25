@@ -17,8 +17,10 @@ where
 
         match data {
             Line::Info(_) => Box::pin(future::ready(())),
-            Line::Copied(_, path) => Box::pin(async move {
-                nix_cli.store_path(&path).await.unwrap();
+            Line::Copied(_, path, source_cache) => Box::pin(async move {
+                if source_cache.to_string() != format!("file://{}", nix_cli.to()) {
+                    nix_cli.store_path(&path).await.unwrap();
+                }
             }),
             Line::Built(_, drv_file) => Box::pin(async move {
                 nix_cli.drv_output(&drv_file).await.unwrap();
@@ -111,6 +113,9 @@ mod test {
 
             Ok(())
         }
+        fn to(&self) -> String {
+            String::from("/tmp/cache")
+        }
     }
 
     #[tokio::test]
@@ -154,12 +159,25 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_run_parses_stdin_and_copies_store_paths() {
+    async fn test_run_does_not_copy_info_lines() {
+        let input: Vec<Result<String, Error>> = vec![Ok(String::from(
+            "/nix/store/y0id07hk69wfhr14mpjq22fv2v27nsnk-zstd-1.5.2-dev",
+        ))];
+
+        let nix_cli = MockNixCli::new();
+        let calls = Arc::clone(&nix_cli.calls);
+        run(input.into_iter(), nix_cli).await;
+
+        let calls = calls.lock().await;
+
+        assert_eq!(*calls, Vec::new());
+    }
+
+    #[tokio::test]
+    async fn test_run_copy_fecthed_store_path() {
         let input: Vec<Result<String, Error>> =
             vec![
-                Ok(String::from("/nix/store/y0id07hk69wfhr14mpjq22fv2v27nsnk-zstd-1.5.2-dev")), 
                 Ok(String::from("copying path '/nix/store/vnwdak3n1w2jjil119j65k8mw1z23p84-glibc-2.35-224' from 'https://cache.nixos.org'...")),
-                Ok(String::from("building '/nix/store/kwd8mkkl1sv3n5z9jf8447gr9g299pmp-nix-cache-copy-0.1.0.drv'..."))
             ];
 
         let nix_cli = MockNixCli::new();
@@ -170,14 +188,44 @@ mod test {
 
         assert_eq!(
             *calls,
-            vec![
-                NixCliCall::CopyStorePath(StorePath::from(String::from(
-                    "/nix/store/vnwdak3n1w2jjil119j65k8mw1z23p84-glibc-2.35-224"
-                ))),
-                NixCliCall::CopyDrvOurput(DrvFile::from(String::from(
-                    "/nix/store/kwd8mkkl1sv3n5z9jf8447gr9g299pmp-nix-cache-copy-0.1.0.drv"
-                ))),
-            ]
+            vec![NixCliCall::CopyStorePath(StorePath::from(String::from(
+                "/nix/store/vnwdak3n1w2jjil119j65k8mw1z23p84-glibc-2.35-224"
+            ))),]
         );
+    }
+
+    #[tokio::test]
+    async fn test_run_copy_derivation_built() {
+        let input: Vec<Result<String, Error>> = vec![Ok(String::from(
+            "building '/nix/store/kwd8mkkl1sv3n5z9jf8447gr9g299pmp-nix-cache-copy-0.1.0.drv'...",
+        ))];
+
+        let nix_cli = MockNixCli::new();
+        let calls = Arc::clone(&nix_cli.calls);
+        run(input.into_iter(), nix_cli).await;
+
+        let calls = calls.lock().await;
+
+        assert_eq!(
+            *calls,
+            vec![NixCliCall::CopyDrvOurput(DrvFile::from(String::from(
+                "/nix/store/kwd8mkkl1sv3n5z9jf8447gr9g299pmp-nix-cache-copy-0.1.0.drv"
+            ))),]
+        );
+    }
+    #[tokio::test]
+    async fn test_run_does_not_copy_path_fetched_from_target_cache() {
+        let input: Vec<Result<String, Error>> =
+            vec![
+                Ok(String::from("copying path '/nix/store/vnwdak3n1w2jjil119j65k8mw1z23p84-glibc-2.35-224' from 'file:///tmp/cache'...")),
+            ];
+
+        let nix_cli = MockNixCli::new();
+        let calls = Arc::clone(&nix_cli.calls);
+        run(input.into_iter(), nix_cli).await;
+
+        let calls = calls.lock().await;
+
+        assert_eq!(*calls, Vec::new());
     }
 }

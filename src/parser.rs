@@ -1,23 +1,24 @@
 use regex::Regex;
 
-use crate::{DrvFile, StorePath};
+use crate::{BinaryCache, DrvFile, StorePath};
 
 #[derive(Debug, PartialEq)]
 pub enum Line {
     Info(String),
-    Copied(String, StorePath),
+    Copied(String, StorePath, BinaryCache),
     Built(String, DrvFile),
 }
 
 impl Line {
     pub fn parse(s: &str) -> Line {
-        let copy_regex = Regex::new(r"^copying path '(.*?)' from '.*'...$").unwrap();
+        let copy_regex = Regex::new(r"^copying path '(.*?)' from '(.*)'...$").unwrap();
         let caps = copy_regex.captures(s);
 
         if let Some(caps) = caps {
             Line::Copied(
                 s.to_string(),
                 StorePath::from(String::from(caps.get(1).unwrap().as_str())),
+                BinaryCache::from(String::from(caps.get(2).unwrap().as_str())),
             )
         } else {
             let build_regex = Regex::new(r"^building '(.*?)'...$").unwrap();
@@ -37,7 +38,7 @@ impl Line {
 
 #[cfg(test)]
 mod test {
-    use crate::{parser::Line, DrvFile, StorePath};
+    use crate::{parser::Line, BinaryCache, DrvFile, StorePath};
 
     #[test]
     fn parse_should_parse_artbitrary_line_as_info() {
@@ -54,7 +55,8 @@ mod test {
                 string,
                 StorePath::from(String::from(
                     "/nix/store/vnwdak3n1w2jjil119j65k8mw1z23p84-glibc-2.35-224"
-                ))
+                )),
+                BinaryCache::from(String::from("https://cache.nixos.org"))
             )
         );
     }

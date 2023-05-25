@@ -11,6 +11,7 @@ use crate::{DrvFile, StorePath};
 pub trait CopyCommand {
     async fn store_path(&self, path: &StorePath) -> anyhow::Result<()>;
     async fn drv_output(&self, drv: &DrvFile) -> anyhow::Result<()>;
+    fn to(&self) -> String;
 }
 
 #[derive(Clone)]
@@ -106,5 +107,9 @@ impl CopyCommand for CliProcess {
 
             self.store_path(store_path).await
         }
+    }
+
+    fn to(&self) -> String {
+        self.to.clone()
     }
 }

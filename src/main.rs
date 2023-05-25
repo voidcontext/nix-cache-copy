@@ -18,6 +18,9 @@ pub type StorePath = String;
 #[newtype(new, borrow = "str", derive(Debug, PartialEq, Clone))]
 pub type DrvFile = String;
 
+#[newtype(new, borrow = "str", derive(Debug, PartialEq, Clone))]
+pub type BinaryCache = String;
+
 impl AsRef<OsStr> for DrvFile {
     fn as_ref(&self) -> &OsStr {
         OsStr::new(self)
