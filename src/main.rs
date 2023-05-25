@@ -4,6 +4,7 @@ use std::{
 };
 
 use clap::Parser;
+use nix::Compression;
 use nova::newtype;
 
 mod bootstrap;
@@ -27,11 +28,17 @@ impl AsRef<OsStr> for DrvFile {
 #[clap(author, version, about, long_about = None)]
 #[clap(propagate_version = true)]
 struct Cli {
-    #[clap(long)]
+    #[clap(long, short = 't')]
     to: String,
 
     #[clap(long, default_value_t = false)]
     dry_run: bool,
+
+    #[clap(long, default_value_t = Compression::None)]
+    compression: Compression,
+
+    #[clap(long, short = 'k')]
+    secret_key: String,
 }
 
 #[tokio::main]
@@ -42,8 +49,7 @@ async fn main() {
 
     bootstrap::run(
         stdin.lock().lines(),
-        nix::CliProcess::new(cli.dry_run),
-        cli.to.clone(),
+        nix::CliProcess::new(cli.dry_run, &cli.to, &cli.compression, &cli.secret_key),
     )
     .await;
 }
