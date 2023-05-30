@@ -5,7 +5,7 @@ use clap::ValueEnum;
 use serde::Deserialize;
 use tokio::process::Command;
 
-use crate::{DrvFile, StorePath};
+use crate::{DrvFile, Error, StorePath};
 
 #[async_trait]
 pub trait CopyCommand {
@@ -72,10 +72,9 @@ impl CopyCommand for CliProcess {
                     .as_str(),
                     path,
                 ])
-                .spawn()
-                .unwrap();
+                .spawn()?;
 
-            child.wait().await.unwrap();
+            child.wait().await?;
         }
 
         Ok(())
@@ -99,10 +98,10 @@ impl CopyCommand for CliProcess {
 
             let store_path = &derivation
                 .get(&drv.to_string())
-                .unwrap()
+                .ok_or_else(|| Error::new("Coulnd't find derivation in the file"))?
                 .outputs
                 .get("out")
-                .unwrap()
+                .ok_or_else(|| Error::new("Couldn't find 'out' attr of derivation"))?
                 .path;
 
             self.store_path(store_path).await

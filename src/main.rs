@@ -27,6 +27,27 @@ impl AsRef<OsStr> for DrvFile {
     }
 }
 
+#[derive(Debug)]
+pub struct Error {
+    message: String,
+}
+
+impl Error {
+    fn new(message: &str) -> Self {
+        Error {
+            message: String::from(message),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("Parser error: {}", self.message))
+    }
+}
+
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
 #[clap(propagate_version = true)]

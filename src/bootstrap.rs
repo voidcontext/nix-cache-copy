@@ -4,7 +4,7 @@ use tokio::sync::mpsc::{self, Sender};
 
 use crate::{nix::CopyCommand, parser::Line, worker};
 
-pub async fn run<R, E: std::fmt::Debug, NC>(input: R, nix_cli: NC)
+pub async fn run<R, E: std::error::Error + Send + Sync + 'static, NC>(input: R, nix_cli: NC)
 where
     R: Iterator<Item = Result<String, E>>,
     NC: CopyCommand + Clone + Send + Sync + 'static,
@@ -40,7 +40,10 @@ where
 // So, the idea here is that nix build will echo the derivations that are being copied and being
 // built. We assume that the build/copy is completed once we receive the next line or the end of
 // the input
-async fn process_stdin<R, E: std::fmt::Debug>(input: R, tx: Sender<Line>) -> Result<(), E>
+async fn process_stdin<R, E: std::error::Error + Send + Sync + 'static>(
+    input: R,
+    tx: Sender<Line>,
+) -> Result<(), anyhow::Error>
 where
     R: Iterator<Item = Result<String, E>>,
 {
@@ -51,17 +54,17 @@ where
         println!("{line}");
 
         // parse and send to the worker
-        let line = Line::parse(&line);
+        let line = Line::parse(&line)?;
 
         if let Some(prev_line) = prev {
-            tx.send(prev_line).await.unwrap();
+            tx.send(prev_line).await?;
         }
 
         prev = Some(line);
     }
 
     if let Some(prev_line) = prev {
-        tx.send(prev_line).await.unwrap();
+        tx.send(prev_line).await?;
     }
 
     Ok(())
@@ -79,6 +82,14 @@ mod test {
 
     #[derive(Debug)]
     struct Error;
+
+    impl std::fmt::Display for Error {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("Error")
+        }
+    }
+
+    impl std::error::Error for Error {}
 
     #[derive(Debug, PartialEq)]
     enum NixCliCall {
