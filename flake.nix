@@ -5,7 +5,7 @@
 
   outputs = {nru, ...}:
     nru.lib.mkOutputs ({pkgsUnstable, ...}: {
-      crate = { src = ./.; };
+      crate = {src = ./.;};
       buildInputs = [pkgsUnstable.cocogitto];
     });
 }
