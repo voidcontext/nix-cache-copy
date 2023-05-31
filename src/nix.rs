@@ -66,7 +66,7 @@ impl CopyCommand for CliProcess {
                     "copy",
                     "--to",
                     format!(
-                        "file://{}?compression={}&secret-key={}",
+                        "{}?compression={}&secret-key={}",
                         self.to, self.compression, self.secret_key
                     )
                     .as_str(),

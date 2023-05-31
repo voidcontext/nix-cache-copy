@@ -18,7 +18,7 @@ where
         match data {
             Line::Info(_) => Box::pin(future::ready(())),
             Line::Copied(_, path, source_cache) => Box::pin(async move {
-                if source_cache.to_string() != format!("file://{}", nix_cli.to()) {
+                if source_cache.to_string() != nix_cli.to() {
                     nix_cli.store_path(&path).await.unwrap();
                 }
             }),
@@ -125,7 +125,7 @@ mod test {
             Ok(())
         }
         fn to(&self) -> String {
-            String::from("/tmp/cache")
+            String::from("file:///tmp/cache")
         }
     }
 
