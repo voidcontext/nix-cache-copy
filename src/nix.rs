@@ -94,8 +94,6 @@ impl CopyCommand for CliProcess {
             let output_str = std::str::from_utf8(&output.stdout)?;
             let derivation: Derivation = serde_json::from_str(output_str)?;
 
-            println!("Derivaton output to copy: {derivation:?}");
-
             let store_path = &derivation
                 .get(&drv.to_string())
                 .ok_or_else(|| Error::new("Coulnd't find derivation in the file"))?
