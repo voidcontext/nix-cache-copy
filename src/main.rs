@@ -63,6 +63,9 @@ struct Cli {
 
     #[clap(long, short = 'k')]
     secret_key: String,
+
+    #[clap(long, default_value_t = false)]
+    skip_cached: bool,
 }
 
 #[tokio::main]
@@ -74,6 +77,7 @@ async fn main() {
     bootstrap::run(
         stdin.lock().lines(),
         nix::CliProcess::new(cli.dry_run, &cli.to, &cli.compression, &cli.secret_key),
+        cli.skip_cached,
     )
     .await;
 }

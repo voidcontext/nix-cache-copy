@@ -4,8 +4,11 @@ use tokio::sync::mpsc::{self, Sender};
 
 use crate::{nix::CopyCommand, parser::Line, worker};
 
-pub async fn run<R, E: std::error::Error + Send + Sync + 'static, NC>(input: R, nix_cli: NC)
-where
+pub async fn run<R, E: std::error::Error + Send + Sync + 'static, NC>(
+    input: R,
+    nix_cli: NC,
+    skip_cached: bool,
+) where
     R: Iterator<Item = Result<String, E>>,
     NC: CopyCommand + Clone + Send + Sync + 'static,
 {
@@ -18,7 +21,7 @@ where
         match data {
             Line::Info(_) => Box::pin(future::ready(())),
             Line::Copied(_, path, source_cache) => Box::pin(async move {
-                if source_cache.to_string() != nix_cli.to() {
+                if source_cache.to_string() != nix_cli.to() && !skip_cached {
                     nix_cli.store_path(&path).await.unwrap();
                 }
             }),
@@ -177,7 +180,7 @@ mod test {
 
         let nix_cli = MockNixCli::new();
         let calls = Arc::clone(&nix_cli.calls);
-        run(input.into_iter(), nix_cli).await;
+        run(input.into_iter(), nix_cli, false).await;
 
         let calls = calls.lock().await;
 
@@ -193,7 +196,7 @@ mod test {
 
         let nix_cli = MockNixCli::new();
         let calls = Arc::clone(&nix_cli.calls);
-        run(input.into_iter(), nix_cli).await;
+        run(input.into_iter(), nix_cli, false).await;
 
         let calls = calls.lock().await;
 
@@ -206,6 +209,22 @@ mod test {
     }
 
     #[tokio::test]
+    async fn test_run_skips_fecthed_store_path_when_skip_fetched_is_true() {
+        let input: Vec<Result<String, Error>> =
+            vec![
+                Ok(String::from("copying path '/nix/store/vnwdak3n1w2jjil119j65k8mw1z23p84-glibc-2.35-224' from 'https://cache.nixos.org'...")),
+            ];
+
+        let nix_cli = MockNixCli::new();
+        let calls = Arc::clone(&nix_cli.calls);
+        run(input.into_iter(), nix_cli, true).await;
+
+        let calls = calls.lock().await;
+
+        assert_eq!(*calls, vec![]);
+    }
+
+    #[tokio::test]
     async fn test_run_copy_derivation_built() {
         let input: Vec<Result<String, Error>> = vec![Ok(String::from(
             "building '/nix/store/kwd8mkkl1sv3n5z9jf8447gr9g299pmp-nix-cache-copy-0.1.0.drv'...",
@@ -213,7 +232,7 @@ mod test {
 
         let nix_cli = MockNixCli::new();
         let calls = Arc::clone(&nix_cli.calls);
-        run(input.into_iter(), nix_cli).await;
+        run(input.into_iter(), nix_cli, false).await;
 
         let calls = calls.lock().await;
 
@@ -233,7 +252,7 @@ mod test {
 
         let nix_cli = MockNixCli::new();
         let calls = Arc::clone(&nix_cli.calls);
-        run(input.into_iter(), nix_cli).await;
+        run(input.into_iter(), nix_cli, false).await;
 
         let calls = calls.lock().await;
 
